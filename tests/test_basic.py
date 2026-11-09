@@ -86,6 +86,20 @@ def dijkstra_all(p):
     return dist
 
 
+
+
+def test_layer_heuristic_admissible_and_optimal():
+    p = lateral_path.small_fixed()
+    h_layer = p.layer_heuristic()
+    h_hop = p.hop_heuristic()
+    assert h_layer(p.start) <= h_hop(p.start) + 1e-9
+    assert abs(astar(p, h_layer)["cost"] - ucs(p)["cost"]) < 1e-9
+    for s in range(10):
+        g = lateral_path.generate(n_hosts=100, density=0.05, risk_spread=2.0, seed=s)
+        opt = ucs(g)["cost"]
+        assert abs(astar(g, g.layer_heuristic())["cost"] - opt) < 1e-9
+        assert g.layer_heuristic()(g.start) <= g.hop_heuristic()(g.start) + 1e-9
+
 def test_astar_expands_at_most_ucs_on_fixed():
     p = lateral_path.small_fixed()
     assert astar(p, p.hop_heuristic())["expanded"] <= ucs(p)["expanded"]
@@ -126,6 +140,7 @@ def main():
     test_unreachable_goal()
     test_random_search_matches_dijkstra()
     test_astar_expands_at_most_ucs_on_fixed()
+    test_layer_heuristic_admissible_and_optimal()
     print("search tests passed (fixed, edge cases, 20 random graphs match Dijkstra)")
     test_fixed_csp_all_methods_agree()
     test_csp_matches_brute_force()

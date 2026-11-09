@@ -9,11 +9,12 @@ from collections import deque
 
 
 class LateralPathProblem:
-    def __init__(self, adj, start, goal, min_cost=1.0, name=""):
+    def __init__(self, adj, start, goal, min_cost=1.0, name="", layers=None):
         self.adj = adj            # node -> list of (node, cost)
         self.start, self.goal = start, goal
         self.min_cost = min_cost
         self.name = name
+        self.layers = layers or {}
         self._hops = None
 
     def neighbors(self, n):
@@ -43,6 +44,24 @@ class LateralPathProblem:
         hops = self.hops_to_goal()
         m = self.min_cost
         return lambda n: hops.get(n, float("inf")) * m
+
+    def layer_heuristic(self):
+        """Weaker admissible heuristic: remaining segment distance times
+        min_cost. Ignores within-segment hops, so it underestimates more
+        than the hop heuristic. Used to compare heuristic quality for A*.
+        Falls back to 0 when layer info is missing."""
+        if not self.layers or self.goal not in self.layers:
+            return lambda n: 0.0
+        goal_layer = self.layers[self.goal]
+        m = self.min_cost
+        layers = self.layers
+
+        def h(n):
+            if n not in layers:
+                return 0.0
+            return max(0, goal_layer - layers[n]) * m
+
+        return h
 
 
 def generate(n_hosts=200, segments=5, density=0.05, risk_spread=4.0,
@@ -81,7 +100,8 @@ def generate(n_hosts=200, segments=5, density=0.05, risk_spread=4.0,
         if all(x != b for x, _ in adj[a]):
             adj[a].append((b, round(1.0 + rng.random() * risk_spread, 3)))
     return LateralPathProblem(adj, start, goal, min_cost=1.0,
-                              name=f"n{n_hosts}_d{density}_r{risk_spread}_s{seed}")
+                              name=f"n{n_hosts}_d{density}_r{risk_spread}_s{seed}",
+                              layers=layer)
 
 
 def small_fixed():
@@ -96,4 +116,11 @@ def small_fixed():
         "admin": [("db", 1.0)],
         "db":    [],
     }
-    return LateralPathProblem(adj, "vpn", "db", min_cost=1.0, name="fixed8")
+    # Layers follow the hop structure so each edge changes layer by at most 1.
+    # That keeps the layer heuristic admissible on this example.
+    layers = {
+        "vpn": 0, "ws1": 1, "ws2": 1, "web": 2, "file": 2,
+        "jump": 2, "admin": 3, "db": 3,
+    }
+    return LateralPathProblem(adj, "vpn", "db", min_cost=1.0, name="fixed8",
+                              layers=layers)
