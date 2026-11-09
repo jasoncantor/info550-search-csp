@@ -1,7 +1,8 @@
-"""Backtracking CSP solvers: plain BT, BT+FC, BT+MRV, BT+MRV+forward checking.
+"""Backtracking CSP solvers: plain BT, BT+FC, BT+MRV, BT+MRV+forward checking,
+and the same with least-constraining-value (LCV) ordering.
 (BT+FC without MRV is included to separate the two effects.)
 
-Metrics counted the same way for all three:
+Metrics counted the same way for all solvers:
   assignments  values tried (var=val attempts)
   backtracks   times a variable ran out of values and search went back
 A node limit stops runaway searches; a stopped run is reported as
@@ -14,8 +15,9 @@ class Cutoff(Exception):
 
 
 class Solver:
-    def __init__(self, csp, mrv=False, fc=False, limit=200_000):
-        self.csp, self.mrv, self.fc, self.limit = csp, mrv, fc, limit
+    def __init__(self, csp, mrv=False, fc=False, lcv=False, limit=200_000):
+        self.csp, self.mrv, self.fc, self.lcv = csp, mrv, fc, lcv
+        self.limit = limit
         self.assignments = 0
         self.backtracks = 0
 
@@ -32,6 +34,32 @@ class Solver:
         return min(unassigned,
                    key=lambda v: (len(self.legal_values(v, assign, doms)),
                                   -len(self.csp.neighbors[v])))
+
+    def order_values(self, var, assign, doms):
+        """Return values for var. With LCV, prefer values that leave the
+        most options open for unassigned neighbors (C2) and that leave
+        the most remaining workload slots (C3)."""
+        vals = list(doms[var])
+        if not self.lcv:
+            return vals
+
+        def score(val):
+            if not self.csp.consistent(var, val, assign):
+                return -1
+            # how many neighbor domain slots would remain if var=val
+            left = 0
+            for n in self.csp.neighbors[var]:
+                if n in assign:
+                    continue
+                for nv in doms[n]:
+                    if nv != val:
+                        left += 1
+            # remaining capacity for this approver after assigning val
+            load = sum(1 for x in assign.values() if x == val)
+            left += max(0, self.csp.cap - load - 1)
+            return left
+
+        return sorted(vals, key=score, reverse=True)
 
     def forward_check(self, var, val, assign, doms):
         """Prune val from unassigned neighbors (C2). If val's approver is
@@ -52,7 +80,7 @@ class Solver:
         if len(assign) == len(self.csp.variables):
             return dict(assign)
         var = self.select(assign, doms)
-        for val in doms[var]:
+        for val in self.order_values(var, assign, doms):
             if not self.csp.consistent(var, val, assign):
                 continue
             self.assignments += 1
@@ -79,9 +107,10 @@ class Solver:
 
 
 def solve(csp, method, limit=200_000):
-    mrv = method in ("mrv", "mrv_fc")
-    fc = method in ("fc", "mrv_fc")
-    s = Solver(csp, mrv=mrv, fc=fc, limit=limit)
+    mrv = method in ("mrv", "mrv_fc", "mrv_fc_lcv")
+    fc = method in ("fc", "mrv_fc", "mrv_fc_lcv")
+    lcv = method in ("lcv", "mrv_fc_lcv")
+    s = Solver(csp, mrv=mrv, fc=fc, lcv=lcv, limit=limit)
     out = s.solve()
     out.update(assignments=s.assignments, backtracks=s.backtracks)
     return out

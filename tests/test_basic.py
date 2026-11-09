@@ -94,7 +94,7 @@ def test_astar_expands_at_most_ucs_on_fixed():
 def test_fixed_csp_all_methods_agree():
     csp = access_csp.small_fixed()
     statuses = {}
-    for m in ("bt", "fc", "mrv", "mrv_fc"):
+    for m in ("bt", "fc", "mrv", "mrv_fc", "mrv_fc_lcv"):
         r = solve(csp, m)
         statuses[m] = r["status"]
         if r["solution"]:
@@ -107,7 +107,7 @@ def test_csp_matches_brute_force():
         csp = access_csp.generate(n_requests=8, n_approvers=3, p_conflict=0.35,
                                   cap=3, seed=s)
         truth = brute_force_csp(csp)
-        for m in ("bt", "fc", "mrv", "mrv_fc"):
+        for m in ("bt", "fc", "mrv", "mrv_fc", "mrv_fc_lcv"):
             r = solve(csp, m)
             assert (r["status"] == "solved") == truth, (s, m, r["status"], truth)
             if r["solution"]:
